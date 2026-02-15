@@ -19,7 +19,7 @@ struct LocaleOption: Identifiable {
 }
 
 enum VoiceDetectorMode: String, CaseIterable, Identifiable {
-    case original = "ChatGPT" // chatgpt
+    case original = "RMS + VoiceDB" //
     case rms = "RMS (vDSP)" // get from Transcriber library
 
     var id: String { rawValue }
@@ -27,13 +27,6 @@ enum VoiceDetectorMode: String, CaseIterable, Identifiable {
 
 @MainActor
 final class HomeViewModel: NSObject, ObservableObject {
-    enum VoiceDetectorMode: String, CaseIterable, Identifiable {
-        case original = "Original"
-        case rms = "RMS (vDSP)"
-
-        var id: String { rawValue }
-    }
-
     static let supportedLocales: [LocaleOption] = [
         LocaleOption(identifier: "ms-MY", label: "Malay (MY)"),
         LocaleOption(identifier: "en-US", label: "English (US)"),

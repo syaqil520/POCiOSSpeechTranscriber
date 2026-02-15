@@ -64,7 +64,7 @@ class SpeechToTextViewModel: ObservableObject {
             model.isRecording = true
             for try await transcription in stream {
                 switch transcription {
-                case .rms(let float):
+                case .rms:
                     print("test")
                 case .transcription(let string):
                     self.model.currentText = string

@@ -54,6 +54,7 @@ final class AudioManager {
         
         audioEngine.stop()
         audioEngine.inputNode.removeTap(onBus: 0)
+        audioSession.setActive(false, options: .notifyOthersOnDeactivation)
         audioTapInstalled = false
     }
 }
