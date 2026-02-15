@@ -18,13 +18,23 @@ struct TranscriptionModel {
     }
 }
 
-class TranscriptionManager {
+protocol AudioBufferTranscriberService {
+
+}
+
+@available(iOS 26.0, *)
+final class TranscriptionManager {
     
+    enum TranscriptionError: Error {
+        case failedToReserveLocale
+    }
+
     private var inputBuilder: AsyncStream<AnalyzerInput>.Continuation?
     private var transcriber: SpeechTranscriber?
     private var analyzer: SpeechAnalyzer?
     private var recognizerTask: Task<(), Error>?
     private var analyzerFormat: AVAudioFormat?
+    private var reservedLocale: Locale?
     private var converter = BufferConverter()
     
     func requestSpeechPermission() async -> Bool {
@@ -37,21 +47,12 @@ class TranscriptionManager {
     }
     
     func startTranscription(onResult: @escaping (String, Bool) -> Void) async throws {
-        guard SpeechTranscriber.isAvailable else {
-            print("speech transcriber not available")
-            return
-        }
-        
-        let instalLocale = await SpeechTranscriber.installedLocales
-        print("debug: installed localed \(instalLocale) \n")
-        
-        let supported = await SpeechTranscriber.supportedLocales
-        print("debug: supported localed \(supported) \n")
-
         let currentLocale = Locale.current
         let locale: Locale = await SpeechTranscriber.supportedLocale(equivalentTo: currentLocale) ?? Locale(
             identifier: "en_US"
         )
+        
+        try await reserve(locale: locale)
         
         transcriber = SpeechTranscriber(
             locale: locale,
@@ -86,5 +87,30 @@ class TranscriptionManager {
         try? await analyzer?.finalizeAndFinishThroughEndOfInput()
         recognizerTask?.cancel()
         recognizerTask = nil
+        analyzer = nil
+        transcriber = nil
+        analyzerFormat = nil
+        
+        if let reservedLocale {
+            _ = await AssetInventory.release(reservedLocale: reservedLocale)
+            self.reservedLocale = nil
+        }
+    }
+    
+    private func reserve(locale: Locale) async throws {
+        if reservedLocale == locale {
+            return
+        }
+        
+        if let reservedLocale {
+            _ = await AssetInventory.release(reservedLocale: reservedLocale)
+            self.reservedLocale = nil
+        }
+        
+        let didReserve = try await AssetInventory.reserve(locale: locale)
+        guard didReserve else {
+            throw TranscriptionError.failedToReserveLocale
+        }
+        reservedLocale = locale
     }
 }

@@ -1,8 +1,8 @@
 import SwiftUI
 
 struct ContentView: View {
-    @State private var viewModel = SpeechToTextViewModel()
-    
+    @StateObject private var viewModel = SpeechToTextViewModel()
+
     var body: some View {
         NavigationView {
             VStack(spacing: 20) {

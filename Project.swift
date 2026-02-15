@@ -20,7 +20,9 @@ let project = Project(
                 "POCiOSSpeechTranscriber/Sources",
                 "POCiOSSpeechTranscriber/Resources",
             ],
-            dependencies: []
+            dependencies: [
+                .external(name: "Transcriber", condition: nil)
+            ]
         ),
         .target(
             name: "POCiOSSpeechTranscriberTests",

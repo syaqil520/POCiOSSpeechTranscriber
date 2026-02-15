@@ -12,17 +12,14 @@ import AVFoundation
 
 class BufferConverter {
     
-    // 1.
     enum Error: Swift.Error {
         case failedToCreateConverter
         case failedToCreateConversionBuffer
         case conversionFailed(NSError?)
     }
     
-    // 2.
     private var converter: AVAudioConverter?
     
-    // 3.
     func convertBuffer(_ buffer: AVAudioPCMBuffer, to format: AVAudioFormat) throws -> AVAudioPCMBuffer {
         let inputFormat = buffer.format
         guard inputFormat != format else {
