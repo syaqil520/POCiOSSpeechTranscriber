@@ -8,12 +8,15 @@ let project = Project(
             destinations: .iOS,
             product: .app,
             bundleId: "dev.tuist.POCiOSSpeechTranscriber",
+            deploymentTargets: .iOS("15.0"),
             infoPlist: .extendingDefault(
                 with: [
                     "UILaunchScreen": [
                         "UIColorName": "",
                         "UIImageName": "",
                     ],
+                    "NSMicrophoneUsageDescription": "We need access to your microphone to transcribe your speech.",
+                    "NSSpeechRecognitionUsageDescription": "We need speech recognition to convert your voice to text.",
                 ]
             ),
             buildableFolders: [
@@ -29,6 +32,7 @@ let project = Project(
             destinations: .iOS,
             product: .unitTests,
             bundleId: "dev.tuist.POCiOSSpeechTranscriberTests",
+            deploymentTargets: .iOS("15.0"),
             infoPlist: .default,
             buildableFolders: [
                 "POCiOSSpeechTranscriber/Tests"
