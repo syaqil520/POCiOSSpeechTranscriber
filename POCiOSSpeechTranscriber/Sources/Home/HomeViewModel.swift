@@ -7,9 +7,7 @@
 
 import Foundation
 import Observation
-import Speech
 import Combine
-import Accelerate
 import Dispatch
 
 struct LocaleOption: Identifiable {
@@ -26,37 +24,21 @@ final class HomeViewModel: NSObject, ObservableObject {
         LocaleOption(identifier: "en-US", label: "English (US)"),
         LocaleOption(identifier: "zh-CN", label: "Chinese (Simplified)"),
         LocaleOption(identifier: "zh-TW", label: "Chinese (Traditional)"),
-        LocaleOption(identifier: "ta-IN", label: "Tamil")
+        LocaleOption(identifier: "ta-IN", label: "Tamil") // not supported
     ]
 
-    let speechToTextService = SpeechToTextServiceImpl()
+    let speechToTextService = SpeechToTextServiceImpl(speechRecognitionProvider: SFSpeechRecognizerProvider())
 
     @Published var transcript: String = ""
     @Published var isListening = false
     @Published var isAuthorized = false
     @Published var errorMessage: String?
 
-    @Published var maxSpeakingRemaining: Double?
-    @Published var endOfUtteranceRemaining: Double?
-
-    @Published var endOfUtteranceTimeout: Double = 3.0
-    @Published var maxSpeakingDuration: Double = 8.0
-
     @Published var selectedLocaleIdentifier: String = "en-US" {
         didSet {
             updateRecognizerLocale()
         }
     }
-
-    private let audioEngine = AVAudioEngine()
-    private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
-    private var recognitionTask: SFSpeechRecognitionTask?
-    private var speechRecognizer: SFSpeechRecognizer?
-
-    private var endOfUtteranceTicker: DispatchSourceTimer?
-    private var lastVoiceActivityTime = CFAbsoluteTimeGetCurrent()
-    private var recordingStartTime: CFAbsoluteTime?
-    private var silenceStartTime: CFAbsoluteTime?
 
     override init() {
         super.init()
@@ -96,34 +78,49 @@ final class HomeViewModel: NSObject, ObservableObject {
 
     private func updateRecognizerLocale() {
         errorMessage = nil
+        transcript = ""
         speechToTextService.setup(
             with: SpeechTranscriptionConfig(
                 locale: Locale(identifier: selectedLocaleIdentifier),
                 shouldReportPartialResults: true,
-                requiresOnDeviceRecognition: true,
-                endofUtteranceTimeout: endOfUtteranceTimeout,
-                maxSpeechDuration: maxSpeakingDuration
-
+                requiresOnDeviceRecognition: false,
+                enableEndOfUtterance: false,
             )
         )
+    }
+
+    private func handleError(_ error: any Error) {
+        if let speechTranscriberError = error as? SpeechTranscriptionError {
+            switch speechTranscriberError {
+            case .unsupportedLocale:
+                errorMessage = "Locale not supported"
+            case .recognizerUnavailable:
+                errorMessage = "Speech recognition is not available on this device."
+            }
+            return
+        }
+
+        errorMessage = error.localizedDescription
+
     }
 }
 
 extension HomeViewModel: SpeechToTextServiceDelegate {
-    nonisolated func didReceiveResult(transcript: String, isFinal: Bool) {
+    nonisolated func didReceiveFinish() {
+        Task { @MainActor in
+            speechToTextService.stopRecording()
+        }
+    }
+    
+    nonisolated func didReceiveResult(transcript: String) {
         Task { @MainActor in
             self.transcript = transcript
-            print("HomeViewModel transcript: \(transcript)")
-            if isFinal {
-                isListening = false
-                errorMessage = nil
-            }
         }
     }
     
     nonisolated func didReceiveError(_ error: any Error) {
         Task { @MainActor in
-            errorMessage = error.localizedDescription
+            handleError(error)
             speechToTextService.stopRecording()
             isListening = false
         }

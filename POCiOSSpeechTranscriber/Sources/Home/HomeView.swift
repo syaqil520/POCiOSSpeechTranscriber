@@ -26,25 +26,11 @@ struct HomeView: View {
             }
             .pickerStyle(.menu)
 
-            Stepper(value: $viewModel.endOfUtteranceTimeout, in: 0.5...5.0, step: 0.5) {
-                Text("End of utterance: \(viewModel.endOfUtteranceTimeout, specifier: "%.1f")s")
-            }
-
-            Stepper(value: $viewModel.maxSpeakingDuration, in: 2.0...60.0, step: 1.0) {
-                Text("Max speaking duration: \(viewModel.maxSpeakingDuration, specifier: "%.0f")s")
-            }
-
-            if let remaining = viewModel.maxSpeakingRemaining {
-                Text("Max speech remaining: \(remaining, specifier: "%.1f")s")
-                    .font(.footnote)
-                    .foregroundColor(.orange)
-            }
-
-            if let remaining = viewModel.endOfUtteranceRemaining {
-                Text("Auto-stop in \(remaining, specifier: "%.1f")s")
-                    .font(.footnote)
-                    .foregroundColor(.orange)
-            }
+//            Picker("Speech Transcriber", selection: ) {
+//                ForEach(HomeViewModel.) {
+//
+//                }
+//            }
 
             ScrollView {
                 Text(viewModel.transcript.isEmpty ? "Your transcription will appear here." : viewModel.transcript)

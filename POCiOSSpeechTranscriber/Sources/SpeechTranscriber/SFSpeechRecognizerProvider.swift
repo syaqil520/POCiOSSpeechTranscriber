@@ -8,47 +8,15 @@
 import Foundation
 import Speech
 
-enum SpeechTranscriptionError: Error {
-    case unsupportedLocale
-    case recognizerUnavailable
-    case setupFailure
-    case notStarted
+protocol SpeechRecognizerProvider {
+    func requestSpeechPermission() async -> Bool
+    func setupRecognizer(with config: SpeechTranscriptionConfig) throws
+    func startTranscription(onReceive: @escaping (String?, Bool?, Error?) -> Void) throws
+    func stopTranscription()
+    func processAudioBuffer(_ buffer: AVAudioPCMBuffer)
 }
 
-struct SpeechTranscriptionConfig {
-    let locale: Locale
-    let shouldReportPartialResults: Bool
-    let requiresOnDeviceRecognition: Bool
-    let endOfUtteranceTimeout: Double
-    let maxSpeechDuration: Double
-    let minRMS: Float
-    let minDecibel: Float
-
-    init(
-        locale: Locale,
-        shouldReportPartialResults: Bool,
-        requiresOnDeviceRecognition: Bool,
-        endofUtteranceTimeout: Double = 3.0,
-        maxSpeechDuration: Double = 8.0,
-        minRMS: Float = 0.0035,
-        minDecibel: Float = -50.0
-
-    ) {
-        self.locale = locale
-        self.shouldReportPartialResults = shouldReportPartialResults
-        self.requiresOnDeviceRecognition = requiresOnDeviceRecognition
-        self.endOfUtteranceTimeout = endofUtteranceTimeout
-        self.maxSpeechDuration = maxSpeechDuration
-        if minRMS > 1 || minRMS < 0 {
-            self.minRMS = 0.0035
-        } else {
-            self.minRMS = minRMS
-        }
-        self.minDecibel = minDecibel
-    }
-}
-
-final class SFSpeechRecognizerProvider {
+final class SFSpeechRecognizerProvider: SpeechRecognizerProvider {
 
     private let audioBufferConverter: AudioBufferConverter = AudioBufferConverter()
 
@@ -97,7 +65,7 @@ final class SFSpeechRecognizerProvider {
         recognitionRequest?.shouldReportPartialResults = config.shouldReportPartialResults
         recognitionRequest?.requiresOnDeviceRecognition = config.requiresOnDeviceRecognition
 
-        guard let recognitionRequest else { throw SpeechTranscriptionError.setupFailure }
+        guard let recognitionRequest else { return }
         recognitionTask = speechRecognizer.recognitionTask(with: recognitionRequest) { result, error in
             onReceive(result?.bestTranscription.formattedString, result?.isFinal, error)
         }
@@ -112,7 +80,6 @@ final class SFSpeechRecognizerProvider {
             recognitionRequest.append(converted)
         } catch {
             recognitionRequest.append(buffer)
-//            print("error convert buffer \(error)")
         }
     }
 
@@ -120,7 +87,7 @@ final class SFSpeechRecognizerProvider {
         guard isTranscriptionRunning else { return }
 
         recognitionRequest?.endAudio()
-        recognitionTask?.cancel()
+        recognitionTask?.finish()
 
         recognitionRequest = nil
         recognitionTask = nil

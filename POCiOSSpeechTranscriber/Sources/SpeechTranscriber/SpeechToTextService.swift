@@ -10,17 +10,23 @@ import Speech
 import Accelerate
 
 protocol SpeechToTextServiceDelegate: AnyObject {
-    func didReceiveResult(transcript: String, isFinal: Bool)
+    func didReceiveResult(transcript: String)
     func didReceiveError(_ error: Error)
+    func didReceiveFinish()
 }
 
 protocol SpeechToTextService {
+    func requestPermissionPermission() async -> Bool
+    func setup(with config: SpeechTranscriptionConfig)
+    func toggleRecording()
+    func startRecording()
+    func stopRecording()
 }
 
 final class SpeechToTextServiceImpl: SpeechToTextService {
 
-    let audioManager: AudioManager = AudioManager()
-    let speechRecognizerProvider = SFSpeechRecognizerProvider()
+    private let audioManager: AudioManager = AudioManager()
+    private let speechRecognizerProvider: SpeechRecognizerProvider
 
     weak var delegate: SpeechToTextServiceDelegate?
 
@@ -29,18 +35,20 @@ final class SpeechToTextServiceImpl: SpeechToTextService {
     private var recordingStartTime: CFAbsoluteTime?
     private var silenceStartTime: CFAbsoluteTime?
 
-    private var maxSpeakingRemaining: Double?
     private var endOfUtteranceRemaining: Double?
-
-    private var maxSpeakingDuration: Double = 8
-    private var endOfUtteranceTimeout: Double = 3.0
+    private var maxSpeechRemaining: Double?
 
     private var isListening = false
     private var isAuthorized = false
+    private var speechConfig: SpeechTranscriptionConfig?
 
     // const
     let minRMS: Float = 0.0035
     let minVoiceDB: Float = -52.0
+
+    init(speechRecognitionProvider: SpeechRecognizerProvider) {
+        self.speechRecognizerProvider = speechRecognitionProvider
+    }
 
     func requestPermissionPermission() async -> Bool {
         let microphoneStatus = await audioManager.requestMicrophonePermission()
@@ -56,6 +64,7 @@ final class SpeechToTextServiceImpl: SpeechToTextService {
 
         do {
             try speechRecognizerProvider.setupRecognizer(with: config)
+            self.speechConfig = config
         } catch {
             delegate?.didReceiveError(error)
         }
@@ -75,26 +84,28 @@ final class SpeechToTextServiceImpl: SpeechToTextService {
             try audioManager.setupAudioSession()
             try speechRecognizerProvider.startTranscription { [weak self] transcript, isFinal, error in
                 guard let self else { return }
-                if let transcript, let isFinal {
-                    delegate?.didReceiveResult(transcript: transcript, isFinal: isFinal)
-                    if isFinal {
-                        stopRecording()
-                    }
+                if let transcript, !transcript.isEmpty {
+                    delegate?.didReceiveResult(transcript: transcript)
                 }
 
                 if let error {
-                    stopRecording()
                     delegate?.didReceiveError(error)
+                } else if isFinal == true {
+                    delegate?.didReceiveFinish()
                 }
             }
 
             try audioManager.startAudioStream { [weak self] buffer in
                 guard let self else { return }
                 speechRecognizerProvider.processAudioBuffer(buffer)
-                checkVoiceActivity(for: buffer)
+                if speechConfig?.enableEndOfUtterance == true {
+                    checkVoiceActivity(for: buffer)
+                }
             }
 
-            startCheckEndOfUtterance()
+            if speechConfig?.enableEndOfUtterance == true {
+                startCheckEndOfUtterance()
+            }
             isListening = true
         } catch {
             delegate?.didReceiveError(error)
@@ -116,7 +127,7 @@ final class SpeechToTextServiceImpl: SpeechToTextService {
 private extension SpeechToTextServiceImpl {
     func startCheckEndOfUtterance () {
         recordingStartTime = CFAbsoluteTimeGetCurrent()
-        maxSpeakingRemaining = maxSpeakingDuration
+        maxSpeechRemaining = speechConfig?.maxSpeechDuration ?? 8.0
         lastVoiceActivityTime = CFAbsoluteTimeGetCurrent()
         silenceStartTime = nil
         endOfUtteranceRemaining = nil
@@ -135,8 +146,8 @@ private extension SpeechToTextServiceImpl {
 
             if let recordingStartTime {
                 let speakingElapsed = now - recordingStartTime
-                maxSpeakingRemaining = max(0, maxSpeakingDuration - speakingElapsed)
-                if speakingElapsed >= maxSpeakingDuration {
+                maxSpeechRemaining = max(0, speechConfig?.maxSpeechDuration ?? 8.0 - speakingElapsed)
+                if speakingElapsed >= speechConfig?.maxSpeechDuration ?? 8.0 {
                     stopRecording()
                     return
                 }
@@ -144,7 +155,7 @@ private extension SpeechToTextServiceImpl {
 
             if let silenceStartTime {
                 let silenceElapsed = now - silenceStartTime
-                let remaining = max(0, endOfUtteranceTimeout - silenceElapsed)
+                let remaining = max(0, speechConfig?.endOfUtteranceTimeout ?? 3.0 - silenceElapsed)
                 endOfUtteranceRemaining = remaining
                 if remaining <= 0 {
                     stopRecording()
@@ -169,7 +180,7 @@ private extension SpeechToTextServiceImpl {
     func hasVoiceActivity(for buffer: AVAudioPCMBuffer) -> Bool {
         guard let rms = buffer.calculateRMS() else { return false }
         let decibel = 20.0 * log10(max(rms, 0.000_001))
-        return rms > minRMS || decibel > minVoiceDB
+        return rms > speechConfig?.minRMS ?? minRMS || decibel > speechConfig?.minDecibel ?? minVoiceDB
     }
 
     func updateVoiceActivity(hasVoice: Bool) {
@@ -181,7 +192,7 @@ private extension SpeechToTextServiceImpl {
             endOfUtteranceRemaining = nil
         } else {
             silenceStartTime = CFAbsoluteTimeGetCurrent()
-            endOfUtteranceRemaining = endOfUtteranceTimeout
+            endOfUtteranceRemaining = speechConfig?.endOfUtteranceTimeout ?? 3.0
         }
     }
 }
