@@ -9,9 +9,10 @@ import Foundation
 import Speech
 import AVFoundation
 
+typealias BufferConverter = AudioBufferConverter
 
-class BufferConverter {
-    
+class AudioBufferConverter {
+
     enum Error: Swift.Error {
         case failedToCreateConverter
         case failedToCreateConversionBuffer

@@ -38,7 +38,7 @@ final class AudioManager {
         
         audioEngine.inputNode.installTap(
             onBus: 0,
-            bufferSize: 4096,
+            bufferSize: 1024,
             format: audioEngine.inputNode.outputFormat(forBus: 0)
         ) { buffer, _ in
             onBuffer(buffer)
@@ -49,12 +49,12 @@ final class AudioManager {
         audioTapInstalled = true
     }
     
-    func stopAudioStream() {
+    func stopAudioStream() throws {
         guard audioTapInstalled else { return }
-        
+
         audioEngine.stop()
         audioEngine.inputNode.removeTap(onBus: 0)
-        audioSession.setActive(false, options: .notifyOthersOnDeactivation)
+        try audioSession.setActive(false, options: .notifyOthersOnDeactivation)
         audioTapInstalled = false
     }
 }

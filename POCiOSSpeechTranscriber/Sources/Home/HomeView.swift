@@ -26,13 +26,6 @@ struct HomeView: View {
             }
             .pickerStyle(.menu)
 
-            Picker("Voice Detection", selection: $viewModel.voiceDetectorMode) {
-                ForEach(VoiceDetectorMode.allCases) { mode in
-                    Text(mode.rawValue).tag(mode)
-                }
-            }
-            .pickerStyle(.segmented)
-
             Stepper(value: $viewModel.endOfUtteranceTimeout, in: 0.5...5.0, step: 0.5) {
                 Text("End of utterance: \(viewModel.endOfUtteranceTimeout, specifier: "%.1f")s")
             }

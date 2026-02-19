@@ -111,7 +111,7 @@ class SpeechToTextViewModel: ObservableObject {
     
     // 6.
     private func stopRecording() async {
-        audioManager.stopAudioStream()
+        try? audioManager.stopAudioStream()
         transcriptionManager.stopTranscription()
         model.isRecording = false
         await transcriber?.stopStream()
