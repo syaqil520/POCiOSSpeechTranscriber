@@ -6,9 +6,7 @@
 //
 
 import Foundation
-import Observation
-import Combine
-import Dispatch
+import SwiftUI
 
 struct LocaleOption: Identifiable {
     let identifier: String
@@ -18,7 +16,7 @@ struct LocaleOption: Identifiable {
 }
 
 @MainActor
-final class HomeViewModel: NSObject, ObservableObject {
+final class HomeViewModel: ObservableObject {
     static let supportedLocales: [LocaleOption] = [
         LocaleOption(identifier: "ms-MY", label: "Malay (MY)"),
         LocaleOption(identifier: "en-US", label: "English (US)"),
@@ -27,12 +25,16 @@ final class HomeViewModel: NSObject, ObservableObject {
         LocaleOption(identifier: "ta-IN", label: "Tamil") // not supported
     ]
 
-    let speechToTextService = SpeechToTextServiceImpl(speechRecognitionProvider: SFSpeechRecognizerProvider())
+    let speechToTextService: SpeechToTextService
+    private var eventTask: Task<Void, Never>?
 
     @Published var transcript: String = ""
     @Published var isListening = false
     @Published var isAuthorized = false
+    @Published var isRecognizerAvailable = false
     @Published var errorMessage: String?
+    @Published var voiceLevel: Float = 0
+    @Published var isLoading: Bool = false
 
     @Published var selectedLocaleIdentifier: String = "en-US" {
         didSet {
@@ -40,32 +42,46 @@ final class HomeViewModel: NSObject, ObservableObject {
         }
     }
 
-    override init() {
-        super.init()
-        speechToTextService.delegate = self
+    init(providerType: SpeechRecognizerProviderType) {
+        switch providerType {
+        case .speechAnalyzer:
+            if #available(iOS 26.0, *) {
+                speechToTextService = SpeechToTextServiceImpl(speechRecognitionProvider: SpeechAnalyzerProvider())
+            } else {
+                fatalError("speechAnalyzer only available for ios 26.0+")
+            }
+        case .sfSpeechRecognizer:
+            speechToTextService = SpeechToTextServiceImpl(speechRecognitionProvider: SFSpeechRecognizerProvider())
+        }
+
         configureDefaultLocale()
         updateRecognizerLocale()
+        observeEvents()
         Task {
             await requestPermissions()
         }
     }
 
-    func requestPermissions() async {
-        isAuthorized = await speechToTextService.requestPermissionPermission()
-        if !isAuthorized {
-            errorMessage = "Please enable Speech Recognition and Microphone access in Settings."
-        } else {
-            errorMessage = nil
-        }
+    deinit {
+        eventTask?.cancel()
     }
 
     func toggleRecording() {
+        errorMessage = nil
         speechToTextService.toggleRecording()
         isListening.toggle()
     }
 
     func stopRecording() {
         speechToTextService.stopRecording()
+        isListening = false
+        voiceLevel = 0
+    }
+
+    func goToSetting() {
+        if let url = URL(string: UIApplication.openSettingsURLString) {
+            UIApplication.shared.open(url)
+        }
     }
 
     private func configureDefaultLocale() {
@@ -77,16 +93,35 @@ final class HomeViewModel: NSObject, ObservableObject {
     }
 
     private func updateRecognizerLocale() {
-        errorMessage = nil
-        transcript = ""
-        speechToTextService.setup(
-            with: SpeechTranscriptionConfig(
-                locale: Locale(identifier: selectedLocaleIdentifier),
-                shouldReportPartialResults: true,
-                requiresOnDeviceRecognition: false,
-                enableEndOfUtterance: false,
-            )
-        )
+        Task { @MainActor in
+            isLoading = true
+            defer { isLoading = false }
+            errorMessage = nil
+            transcript = ""
+            do {
+                try await speechToTextService.setup(
+                    with: SpeechTranscriptionConfig(
+                        locale: Locale(identifier: selectedLocaleIdentifier),
+                        shouldReportPartialResults: true,
+                        requiresOnDeviceRecognition: false,
+                        enableEndOfUtterance: false
+                    )
+                )
+                isRecognizerAvailable = true
+            } catch {
+                handleError(error)
+                isRecognizerAvailable = false
+            }
+        }
+    }
+
+    private func requestPermissions() async {
+        isAuthorized = await speechToTextService.requestPermissionPermission()
+        if !isAuthorized {
+            errorMessage = "Please enable Speech Recognition and Microphone access in Settings."
+        } else {
+            errorMessage = nil
+        }
     }
 
     private func handleError(_ error: any Error) {
@@ -101,28 +136,29 @@ final class HomeViewModel: NSObject, ObservableObject {
         }
 
         errorMessage = error.localizedDescription
+    }
 
-    }
-}
-
-extension HomeViewModel: SpeechToTextServiceDelegate {
-    nonisolated func didReceiveFinish() {
-        Task { @MainActor in
-            speechToTextService.stopRecording()
-        }
-    }
-    
-    nonisolated func didReceiveResult(transcript: String) {
-        Task { @MainActor in
-            self.transcript = transcript
-        }
-    }
-    
-    nonisolated func didReceiveError(_ error: any Error) {
-        Task { @MainActor in
-            handleError(error)
-            speechToTextService.stopRecording()
-            isListening = false
+    private func observeEvents() {
+        eventTask?.cancel()
+        eventTask = Task { [weak self] in
+            guard let self else { return }
+            for await event in speechToTextService.events {
+                switch event {
+                case .transcript(let transcript):
+                    self.transcript = transcript
+                case .audioLevel(let level):
+                    self.voiceLevel = level
+                case .finished:
+                    self.speechToTextService.stopRecording()
+                    self.isListening = false
+                    self.voiceLevel = 0
+                case .error(let error):
+                    self.handleError(error)
+                    self.speechToTextService.stopRecording()
+                    self.isListening = false
+                    self.voiceLevel = 0
+                }
+            }
         }
     }
 }

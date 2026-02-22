@@ -4,7 +4,8 @@ import SwiftUI
 struct POCiOSSpeechTranscriberApp: App {
     var body: some Scene {
         WindowGroup {
-            HomeView()
+            EntryView()
+                .preferredColorScheme(.light)
         }
     }
 }

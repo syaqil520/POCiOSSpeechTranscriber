@@ -18,7 +18,7 @@ final class AudioManager {
         try audioSession.setCategory(.record, mode: .measurement, options: .duckOthers)
         try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
     }
-    
+
     func requestMicrophonePermission() async -> Bool {
         await withCheckedContinuation { continuation in
             if #available(iOS 17.0, *) {

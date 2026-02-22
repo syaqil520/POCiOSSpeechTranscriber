@@ -10,7 +10,7 @@ import Speech
 
 protocol SpeechRecognizerProvider {
     func requestSpeechPermission() async -> Bool
-    func setupRecognizer(with config: SpeechTranscriptionConfig) throws
+    func setupRecognizer(with config: SpeechTranscriptionConfig) async throws
     func startTranscription(onReceive: @escaping (String?, Bool?, Error?) -> Void) throws
     func stopTranscription()
     func processAudioBuffer(_ buffer: AVAudioPCMBuffer)
@@ -37,7 +37,7 @@ final class SFSpeechRecognizerProvider: SpeechRecognizerProvider {
         }
     }
 
-    func setupRecognizer(with config: SpeechTranscriptionConfig) throws {
+    func setupRecognizer(with config: SpeechTranscriptionConfig) async throws {
         guard checkLocaleAvailability(for: config.locale) else {
             throw SpeechTranscriptionError.unsupportedLocale
         }
